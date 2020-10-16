@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -154,34 +155,39 @@ type numberWriter struct {
 }
 
 func (w *numberWriter) Write(p []byte) (n int, err error) {
+	var original = p
+	if bytes.Contains(p, []byte(string('\n'))) {
+		// fmt.Println("original", original)
+		var tokenLen int
+		for i, c := range original {
+			// fmt.Println(c)
+			tokenLen++
+			if c != '\n' {
+				continue
+			}
+			// fmt.Println(w.buf)
+			// fmt.Println(p)
 
-	var (
-		original = p
-		tokenLen int
-	)
-	for i, c := range original {
-		tokenLen++
-		if c != '\n' {
-			continue
+			token := p[:tokenLen]
+			// fmt.Println(token)
+			p = original[i+1:]
+			// fmt.Println(p)
+			// fmt.Println(tokenLen)
+			tokenLen = 0
+
+			format := "%6d\t%s%s"
+			if w.currentLine > 999999 {
+				format = "%d\t%s%s"
+			}
+
+			_, er := fmt.Fprintf(w.w, format, w.currentLine, string(w.buf), string(token))
+			if er != nil {
+				return i + 1, er
+			}
+			w.buf = w.buf[:0]
+			w.currentLine++
 		}
-
-		token := p[:tokenLen]
-		p = original[i+1:]
-		tokenLen = 0
-
-		format := "%6d\t%s%s"
-		if w.currentLine > 999999 {
-			format = "%d\t%s%s"
-		}
-
-		_, er := fmt.Fprintf(w.w, format, w.currentLine, string(w.buf), string(token))
-		if er != nil {
-			return i + 1, er
-		}
-		w.buf = w.buf[:0]
-		w.currentLine++
 	}
-
 	if len(p) > 0 {
 		w.buf = append(w.buf, p...)
 	}
@@ -189,10 +195,12 @@ func (w *numberWriter) Write(p []byte) (n int, err error) {
 }
 
 func (w *numberWriter) Flush() error {
+	// fmt.Println("Flush!")
 	format := "%6d\t%s"
 	if w.currentLine > 999999 {
 		format = "%d\t%s"
 	}
+	// fmt.Println(w.buf)
 	_, err := fmt.Fprintf(w.w, format, w.currentLine, string(w.buf))
 	w.buf = w.buf[:0]
 	return err
